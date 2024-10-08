@@ -1,0 +1,17 @@
+ARG DOWNLOAD_URL=https://www.draytek.co.uk/support/downloads/vigor-2960?task=download.send&id=3454:v2960-1516&catid=341
+ARG FW2TAR_VERSION=f44361d4c64e9e6f54d940cb2637bf9283961a29
+ARG PENGUIN_VERSION=v1.2.24
+
+FROM rehosting/fw2tar:${FW2TAR_VERSION} AS prep
+ARG DOWNLOAD_URL
+RUN apt-get update && apt-get -y install curl
+RUN curl ${DOWNLOAD_URL} --output /input_file
+RUN fakeroot_fw2tar /input_file
+RUN mv /*.rootfs.tar.gz /project.rootfs.tar.gz
+
+FROM rehosting/penguin:${PENGUIN_VERSION}
+WORKDIR /workspace
+COPY --from=prep /project.rootfs.tar.gz /tmp
+RUN penguin init /tmp/project.rootfs.tar.gz --output_base / --output /workspace
+RUN chmod -R 777 /workspace
+CMD [ "penguin", "run", "."]

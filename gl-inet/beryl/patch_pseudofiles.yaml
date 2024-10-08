@@ -1,0 +1,28 @@
+# static_files:
+#   /etc/config/wireless:
+#     type: inline_file
+#     contents: '0'
+#     mode: 777
+
+pseudofiles:
+  /proc/gl-hw-info/model:
+    read:
+      model: const_buf
+      val: "MT300A"
+    write:
+      model: discard
+    ioctl:
+      '*':
+        model: return_const
+        val: 0
+
+  # /proc/device-tree/model:
+  #   read:
+  #     model: const_buf
+  #     val: "MT300A"
+  #   write:
+  #     model: discard
+  #   ioctl:
+  #     '*':
+  #       model: return_const
+  #       val: 0 

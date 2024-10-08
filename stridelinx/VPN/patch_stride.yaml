@@ -1,0 +1,9 @@
+env:
+  igloo_init: /sbin/init
+  sxid: 0150_5MS-MDM-1
+pseudofiles:
+  /dev/dsa:
+    ioctl:
+      "*":
+        model: return_const
+        val: 0

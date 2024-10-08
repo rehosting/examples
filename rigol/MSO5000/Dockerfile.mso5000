@@ -1,0 +1,23 @@
+ARG DOWNLOAD_URL=https://beyondmeasure.rigoltech.com/acton/attachment/1579/f-c1edeca3-91de-44f3-932e-dbe38ddb3c9c/0/-/-/-/-/MSO5000%28ARM%29Update_v00.01.03.03.00.zip?sid=TV2:Q2jKaGpUj
+ARG FW2TAR_VERSION=f44361d4c64e9e6f54d940cb2637bf9283961a29
+ARG PENGUIN_VERSION=v1.2.24
+
+FROM rehosting/fw2tar:${FW2TAR_VERSION} AS prep
+ARG DOWNLOAD_URL
+RUN apt-get update && apt-get install -y curl
+RUN curl --output /input_file ${DOWNLOAD_URL}
+# RUN fakeroot_fw2tar --primary_limit 2 /input_file
+RUN fakeroot sh -c 'unblob -k /input_file'
+RUN fakeroot sh -c 'mkdir /fs;\
+    cp -avr "/input_file_extract/MSO5000(ARM)Update_v00.01.03.03.00/DS5000Update.GEL_extract/system.img.gz_extract/system.img_extract/3453940-14354645.gzip_extract/rootfs.img_extract/"* /fs; \
+    cp -avr "/input_file_extract/MSO5000(ARM)Update_v00.01.03.03.00/DS5000Update.GEL_extract/app.img.gz_extract/app.img_extract/img-1002851618_vol-app.ubifs_extract/"* /fs/rigol; \
+    tar czf project.rootfs.tar.gz -C /fs .;'
+
+FROM rehosting/penguin:${PENGUIN_VERSION}
+WORKDIR /workspace
+COPY --from=prep /project.rootfs.tar.gz /tmp
+RUN penguin init /tmp/project.rootfs.tar.gz --output_base / --output /workspace
+COPY ./rigol/MSO5000/patches.yaml /workspace
+RUN echo "\npatches:\n- patches.yaml\n">> config.yaml
+RUN chmod -R 777 /workspace
+CMD [ "penguin", "run", "."]

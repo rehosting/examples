@@ -1,0 +1,19 @@
+ARG DOWNLOAD_URL=https://panda.re/secret/stride.bin
+ARG FW2TAR_VERSION=38455f876dc84f2b5a3b501455e48a50079649f0
+ARG PENGUIN_VERSION=v1.2.24
+
+FROM rehosting/fw2tar:${FW2TAR_VERSION} AS prep
+ARG DOWNLOAD_URL
+RUN apt-get update && apt-get install wget
+RUN wget -O /input_file ${DOWNLOAD_URL}
+RUN fakeroot_fw2tar /input_file
+RUN mv /*.rootfs.tar.gz /project.rootfs.tar.gz
+
+FROM rehosting/penguin:${PENGUIN_VERSION}
+WORKDIR /workspace
+COPY --from=prep /project.rootfs.tar.gz /tmp
+RUN penguin init /tmp/project.rootfs.tar.gz --output_base / --output /workspace
+COPY ./stridelinx/VPN/patch*.yaml /workspace
+RUN echo "\npatches:\n- patch_stride.yaml\n">> config.yaml
+RUN chmod -R 777 /workspace
+CMD [ "penguin", "run", "."]
