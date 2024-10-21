@@ -1,0 +1,24 @@
+#!/bin/bash
+if [ $# -ne 1 ]; then
+    echo "Usage: build_target <target_name>"
+    exit
+fi
+
+target=`basename $1`
+
+if [[ "$1" == "Dockerfile.*" ]];
+then
+    target=$(echo $1 | cut -d'.' -f2)
+fi
+
+
+dockerfile=$(find . -name "Dockerfile.$target" | head -n 1)
+
+if [ -z $dockerfile ]; then
+    echo "$target not found"
+    exit
+fi
+
+echo "Building $target from $dockerfile"
+
+docker build -t $target -f $dockerfile .
