@@ -68,3 +68,14 @@ ssh -N -L 8000:192.168.0.2:55367 user@dev_box
 ```
 
 After this you could connect to `http://localhost:8000` in a graphical web browser and interact with the rehosted service. If you are running penguin locally, you can do not need to do this step, and you can point your web browser directly at the IP address and port reported by the VPN
+
+# Test image
+
+For penguin development or when working on your own utils you may find `build_basic_rootfs.py` useful.  This script creates a penguin-compatible rootfs tar.gz that provides a very basic http response.
+
+Example usage:
+```sh
+$ ./build_basic_rootfs.py --arch armel ./test_arm.rootfs.tar.gz
+$ penguin init test_arm.rootfs.tar.gz
+$ penguin run ./projects/test_arm
+```
