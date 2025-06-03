@@ -57,10 +57,15 @@ basic_init = r'''
 @click.option('--repo', default='rehosting/busybox',
               help='GitHub repository to fetch the busybox from.')
 @click.option('--release', default='latest', help='Busybox version to fetch.')
-def cli(arch, repo, release, output):
+@click.option(
+    '--files',
+    help='Colon-separated src:dest pairs to copy into the rootfs. Example: /path/to/ls:/bin/ls',
+    multiple=True,
+)
+def cli(arch, repo, release, output, files):
     """
-    This is a CLI tool for building a basic roofs.
-     Arguments:
+    This is a CLI tool for building a basic rootfs.
+    Arguments:
         output: Output name for the rootfs tar.gz (e.g., basic_rootfs.tar.gz)
     """
     with tempfile.TemporaryDirectory() as working_dir:
@@ -91,6 +96,21 @@ def cli(arch, repo, release, output):
             f.write(basic_init)
             click.echo("Created init script")
         os.chmod(os.path.join(rootfs_path, 'init'), 0o755)
+
+        # Handle --files option
+        for file_pair in files:
+            for mapping in file_pair.split(','):
+                mapping = mapping.strip()
+                if not mapping:
+                    continue
+                if ':' not in mapping:
+                    click.echo(f"Invalid --files entry: {mapping}", err=True)
+                    continue
+                src, dest = mapping.split(':', 1)
+                dest_path = os.path.join(rootfs_path, dest.lstrip('/'))
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                shutil.copy(src, dest_path)
+                click.echo(f"Copied {src} to {dest}")
 
         # Tar up everything with ./ as the root
         tar_output_path = os.path.abspath(output)
