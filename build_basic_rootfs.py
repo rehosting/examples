@@ -82,21 +82,24 @@ def get_init_content(init_path):
 @click.option('--repo', default='rehosting/busybox',
               help='GitHub repository to fetch the busybox from.')
 @click.option('--release', default='latest', help='Busybox version to fetch.')
+@click.option('--busybox', default=None,
+              help='Path to local busybox binary. If provided, '
+                   'skips downloading.')
 @click.option(
     '--files',
-    help='Colon-separated src:dest pairs to copy into the rootfs. Example: /path/to/ls:/bin/ls',
+    help='Colon-separated src:dest pairs to copy into the rootfs. '
+         'Example: /path/to/ls:/bin/ls',
     multiple=True,
 )
 @click.option('--init', default=None,
               help='Path to custom init script. Default: basic www server.')
-def cli(arch, repo, release, output, files, init):
+def cli(arch, repo, release, output, files, init, busybox):
     """
     This is a CLI tool for building a basic rootfs.
     Arguments:
         output: Output name for the rootfs tar.gz (e.g., basic_rootfs.tar.gz)
     """
     with tempfile.TemporaryDirectory() as working_dir:
-        busybox_tgz = download_busybox(repo, release, working_dir)
         rootfs_path = os.path.join(working_dir, 'rootfs_targz')
         os.mkdir(rootfs_path)
 
@@ -104,16 +107,31 @@ def cli(arch, repo, release, output, files, init):
             os.makedirs(os.path.join(rootfs_path, dir_name), exist_ok=True)
             click.echo(f"Created directory: {dir_name}")
 
-        try:
-            subprocess.run(['tar', '-xzf', busybox_tgz, '-C', working_dir],
-                           check=True)
-            # Extracting the binary directly to the rootfs wasn't behaving
-            shutil.copy(os.path.join(working_dir, f'build/{arch}/busybox'),
-                        os.path.join(rootfs_path, 'bin', 'busybox'))
-            click.echo(f"Extracted busybox for {arch} to {rootfs_path}/bin")
-        except subprocess.CalledProcessError as e:
-            click.echo(f"Error extracting busybox for {arch}: {e}", err=True)
-            return
+        # Handle busybox - either use local file or download
+        if busybox:
+            # Use local busybox file
+            if not os.path.exists(busybox):
+                click.echo(f"Error: Local busybox file not found: {busybox}",
+                           err=True)
+                return
+            shutil.copy(busybox, os.path.join(rootfs_path, 'bin', 'busybox'))
+            click.echo(f"Copied local busybox from {busybox} to "
+                       f"{rootfs_path}/bin")
+        else:
+            # Download busybox
+            busybox_tgz = download_busybox(repo, release, working_dir)
+            try:
+                subprocess.run(['tar', '-xzf', busybox_tgz, '-C', working_dir],
+                               check=True)
+                # Extracting the binary directly to the rootfs wasn't behaving
+                shutil.copy(os.path.join(working_dir, f'build/{arch}/busybox'),
+                            os.path.join(rootfs_path, 'bin', 'busybox'))
+                click.echo(f"Extracted busybox for {arch} to "
+                           f"{rootfs_path}/bin")
+            except subprocess.CalledProcessError as e:
+                click.echo(f"Error extracting busybox for {arch}: {e}",
+                           err=True)
+                return
 
         os.symlink('busybox', os.path.join(rootfs_path, 'bin', 'sh'))
 
@@ -151,8 +169,8 @@ def cli(arch, repo, release, output, files, init):
         # Tar up everything with ./ as the root
         tar_output_path = os.path.abspath(output)
         click.echo(f"Creating tarball at {tar_output_path}...")
-        subprocess.run(['tar', '-czf', tar_output_path, '-C', rootfs_path, '.'],
-                       check=True)
+        subprocess.run(['tar', '-czf', tar_output_path, '-C', rootfs_path,
+                        '.'], check=True)
         click.echo(f"Tarball created: {tar_output_path}")
 
 
@@ -178,7 +196,8 @@ def download_busybox(repo, release, output_dir):
 
         click.echo(f"Downloaded latest release to {file_path}")
     else:
-        click.echo(f"Failed to fetch release info: {response.status_code} - {response.text}")
+        click.echo(f"Failed to fetch release info: {response.status_code} - "
+                   f"{response.text}")
     return file_path
 
 
