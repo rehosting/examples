@@ -51,6 +51,31 @@ basic_init = r'''
 '''
 
 
+def get_init_content(init_path):
+    """
+    Returns the appropriate init script content based on the specified path.
+    If init_path is None, returns the default basic_init.
+    If init_path is a file path, reads and returns the file content.
+    """
+    if init_path is None:
+        return basic_init
+    else:
+        # Assume it's a file path
+        try:
+            with open(init_path, 'r') as f:
+                content = f.read()
+            click.echo(f"Read custom init script from {init_path}")
+            return content
+        except FileNotFoundError:
+            click.echo(f"Error: Init script file not found: {init_path}",
+                       err=True)
+            raise
+        except Exception as e:
+            click.echo(f"Error reading init script file {init_path}: {e}",
+                       err=True)
+            raise
+
+
 @click.command()
 @click.argument('output')
 @click.option('--arch', help='Architecture (e.g., armel)', required=True)
@@ -62,7 +87,9 @@ basic_init = r'''
     help='Colon-separated src:dest pairs to copy into the rootfs. Example: /path/to/ls:/bin/ls',
     multiple=True,
 )
-def cli(arch, repo, release, output, files):
+@click.option('--init', default=None,
+              help='Path to custom init script. Default: basic www server.')
+def cli(arch, repo, release, output, files, init):
     """
     This is a CLI tool for building a basic rootfs.
     Arguments:
@@ -89,12 +116,21 @@ def cli(arch, repo, release, output, files):
             return
 
         os.symlink('busybox', os.path.join(rootfs_path, 'bin', 'sh'))
-        with open(os.path.join(rootfs_path, 'www_server.py'), 'w') as f:
-            f.write(basic_micropython_www_server)
-            click.echo("Created basic web server script")
+
+        # Create www_server.py only if using default (None) init
+        if init is None:
+            with open(os.path.join(rootfs_path, 'www_server.py'), 'w') as f:
+                f.write(basic_micropython_www_server)
+                click.echo("Created basic web server script")
+
+        # Create init script based on specified path or use default
+        init_content = get_init_content(init)
         with open(os.path.join(rootfs_path, 'init'), 'w') as f:
-            f.write(basic_init)
-            click.echo("Created init script")
+            f.write(init_content)
+        if init is None:
+            click.echo("Created init script (default: basic www server)")
+        else:
+            click.echo(f"Created init script from: {init}")
         os.chmod(os.path.join(rootfs_path, 'init'), 0o755)
 
         # Handle --files option
