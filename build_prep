@@ -21,4 +21,4 @@ fi
 
 echo "Building $target from $dockerfile"
 
-docker build -t $target --target run -f $dockerfile `dirname $dockerfile`
+docker build -t $target --target prep -f $dockerfile `dirname $dockerfile`
