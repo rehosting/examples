@@ -1,0 +1,372 @@
+run-name: >-
+  ${{ github.event_name == 'schedule' && 'Nightly penguin CI tests' || 
+      format(
+        'Manual Test (Targets: {0}, Penguin: {1}) by @{2}',
+        github.event.inputs.targets,
+        github.event.inputs.penguin_git_ref != '' && github.event.inputs.penguin_git_ref || github.event.inputs.penguin_version,
+        github.actor
+      )
+  }}
+
+on: 
+  workflow_call:
+    inputs:
+      targets:
+        description: 'comma separated list of targets to build'
+        type: string
+        required: false
+        default: 'all'
+      penguin_version:
+        description: 'penguin version to use'
+        type: string
+        required: false
+        default: 'latest'
+      fw2tar_version:
+        description: 'fw2tar version to use'
+        type: string
+        required: false
+        default: 'latest'
+      penguin_git_ref:
+        description: 'penguin git ref to build from instead of pulling image'
+        type: string
+        required: false
+      fw2tar_git_ref:
+        description: 'fw2tar git ref to build from instead of pulling image'
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'comma separated list of targets to build'
+        required: false
+        default: 'all'
+      penguin_version:
+        description: 'penguin version to use'
+        required: false
+        default: 'latest'
+      fw2tar_version:
+        description: 'fw2tar version to use'
+        required: false
+        default: 'latest'
+      penguin_git_ref:
+        description: 'penguin git ref to build from instead of pulling image'
+        required: false
+      fw2tar_git_ref:
+        description: 'fw2tar git ref to build from instead of pulling image'
+        required: false
+#   schedule:
+    # - cron: '0 7 * * 1-5' # Every weekday at 2:00am Eastern Time (7:00am UTC)
+
+permissions:
+  contents: read
+
+env:
+  CI_TARGETS: 'dns320,mso5000,stride,trendnet' # Default targets for scheduled runs
+
+jobs:
+    check-docker-images:
+        runs-on: ubuntu-latest
+        outputs:
+          should_run: ${{ steps.check-changes.outputs.should_run }}
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
+            
+          - name: Set should_run for manual runs
+            if: github.event_name == 'workflow_dispatch'
+            id: check-changes
+            run: echo "should_run=true" >> $GITHUB_OUTPUT
+            
+          - name: Restore cached digests
+            if: github.event_name == 'schedule'
+            id: cache-restore
+            uses: actions/cache/restore@v4
+            with:
+              path: /tmp/docker-image-info
+              key: docker-image-digests
+              restore-keys: docker-image-digests
+          
+          - name: Log in to Docker Hub
+            if: github.event_name == 'schedule'
+            uses: docker/login-action@v3
+            with:
+              username: rehosting
+              password: ${{secrets.DOCKERHUB_TOKEN}}
+              
+          - name: Check for Docker image changes
+            if: github.event_name == 'schedule'
+            id: check-changes-sched
+            run: |
+              set -e
+              
+              # Default to running if we can't determine changes
+              SHOULD_RUN="true"
+
+              # Get current image digests
+              echo "Checking current Docker image digests..."
+              PENGUIN_DIGEST=$(docker manifest inspect rehosting/penguin:latest -v | jq -r '.Descriptor.digest // .manifests[0].digest')
+              FW2TAR_DIGEST=$(docker manifest inspect rehosting/fw2tar:latest -v | jq -r '.Descriptor.digest // .manifests[0].digest')
+              
+              echo "Current Penguin digest: $PENGUIN_DIGEST"
+              echo "Current FW2TAR digest: $FW2TAR_DIGEST"
+              
+              # Check if we have previous digests to compare
+              if [ -f "/tmp/docker-image-info/digests.json" ]; then
+                echo "Found previous image digests"
+                PREV_PENGUIN_DIGEST=$(jq -r '.penguin_digest' /tmp/docker-image-info/digests.json)
+                PREV_FW2TAR_DIGEST=$(jq -r '.fw2tar_digest' /tmp/docker-image-info/digests.json)
+                
+                echo "Previous Penguin digest: $PREV_PENGUIN_DIGEST"
+                echo "Previous FW2TAR digest: $PREV_FW2TAR_DIGEST"
+                
+                if [ "$PENGUIN_DIGEST" == "$PREV_PENGUIN_DIGEST" ] && [ "$FW2TAR_DIGEST" == "$PREV_FW2TAR_DIGEST" ]; then
+                  echo "No changes detected in Docker images"
+                  SHOULD_RUN="false"
+                else
+                  echo "Changes detected in Docker images"
+                fi
+              else
+                echo "No previous digest data found, will run tests"
+                mkdir -p /tmp/docker-image-info
+              fi
+              
+              # Save current digests for next run
+              echo "{\"penguin_digest\":\"$PENGUIN_DIGEST\",\"fw2tar_digest\":\"$FW2TAR_DIGEST\",\"timestamp\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > /tmp/docker-image-info/digests.json
+
+              echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
+              
+          - name: Save digests to cache
+            if: github.event_name == 'schedule'
+            uses: actions/cache/save@v4
+            with:
+              path: /tmp/docker-image-info
+              key: docker-image-digests
+
+    # Might want to change these to one job to reflect fw2tar/penguin containers combined? And shenanigans for backwards compatibility?
+    prepare-git-build-matrix:
+      runs-on: ubuntu-latest
+      outputs:
+        matrix: ${{ steps.set.outputs.matrix }}
+      steps:
+        - id: set
+          run: |
+            matrix='[]'
+
+            if [ -n "${{ github.event.inputs.fw2tar_git_ref }}" ]; then
+              matrix=$(jq -c '. += [{"project":"fw2tar","ref":"${{ github.event.inputs.fw2tar_git_ref }}"}]' <<< "$matrix")
+            fi
+
+            if [ -n "${{ github.event.inputs.penguin_git_ref }}" ]; then
+              matrix=$(jq -c '. += [{"project":"penguin","ref":"${{ github.event.inputs.penguin_git_ref }}"}]' <<< "$matrix")
+            fi
+
+            echo "matrix=$matrix" >> $GITHUB_OUTPUT
+
+    git-build-matrix:
+      needs: prepare-git-build-matrix
+      if: ${{ needs.prepare-git-build-matrix.outputs.matrix != '[]' }}
+      runs-on: ubuntu-latest
+      strategy:
+        matrix:
+          include: ${{ fromJSON(needs.prepare-git-build-matrix.outputs.matrix) }}
+      steps:
+        - name: Log in to Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: rehosting
+            password: ${{secrets.DOCKERHUB_TOKEN}}
+
+        - name: Check if ${{ matrix.project }} tag exists for this git ref ${{ matrix.ref }}
+          id: git-check
+          continue-on-error: true
+          run: docker manifest inspect rehosting/${{ matrix.project }}:git-${{ matrix.ref }}
+
+        - name: Fetch ${{ matrix.project }} at git ref
+          if: steps.git-check.outcome == 'failure'
+          run: |
+            git init ${{ matrix.project }}
+            cd ${{ matrix.project }}
+
+            git remote add origin https://x-access-token:${{ secrets.REHOSTING_ORG_READ }}@github.com/rehosting/${{ matrix.project }}.git
+            git fetch --depth=1 origin ${{ matrix.ref }}
+            git checkout FETCH_HEAD
+
+        - name: Build and push ${{ matrix.project }} Docker image
+          if: steps.git-check.outcome == 'failure'
+          uses: docker/build-push-action@v6.3.0
+          with:
+            context: ./${{ matrix.project }}
+            push: true
+            tags: rehosting/${{ matrix.project }}:git-${{ matrix.ref }}
+
+    next-version:
+        runs-on: ubuntu-latest
+        needs:
+          - check-docker-images
+          - git-build-matrix
+        if: always()
+        outputs:
+          matrix: ${{ steps.find_dockerfiles.outputs.matrix }}
+          target: ${{ steps.target.outputs.target }}
+          jobs: ${{ steps.target.outputs.jobs }}
+        steps:
+          - name: Bail if nothing needed
+            # Skip scheduled runs if no Docker image changes. Had to move here to make previous git jobs conditional
+            if: github.event_name == 'schedule' && needs.check-docker-images.outputs.should_run != 'true'
+            run: exit 0
+
+          - name: Checkout code
+            uses: actions/checkout@v4
+          
+          # If this is a scheduled run, log why we're running
+          - name: Log run reason
+            if: github.event_name == 'schedule'
+            run: echo "Running scheduled tests because Docker images have changed since last successful run"
+            
+          - name: Find all the dockerfiles with patch_test.yaml
+            id: find_dockerfiles
+            run: |
+              TARGET_INPUT=""
+              if [ "${{ github.event_name }}" == "schedule" ]; then
+                TARGET_INPUT="${{ env.CI_TARGETS }}"
+              else
+                TARGET_INPUT="${{ github.event.inputs.targets }}"
+              fi
+
+              # Find all Dockerfile.* files, get their directory, check for patch_test.yaml, then extract target
+              VALID_TARGETS=$(find . -type f -name "Dockerfile.*" -printf '%h\n' | sort -u | while read dir; do
+                if [ -f "$dir/patch_test.yaml" ]; then
+                  basename "$dir"/Dockerfile.* | cut -d. -f2
+                fi
+              done)
+
+              if [ "$TARGET_INPUT" == "all" ]; then
+                OUTPUTS=$(echo "$VALID_TARGETS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+              else
+                # Filter VALID_TARGETS based on TARGET_INPUT
+                FILTERED_TARGETS=$(echo "$VALID_TARGETS" | grep -wFf <(echo "$TARGET_INPUT" | tr ',' '\n'))
+                OUTPUTS=$(echo "$FILTERED_TARGETS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+                # Check for invalid targets only on workflow_dispatch when not 'all'
+                REQUESTED_TARGETS=$(echo "$TARGET_INPUT" | tr ',' '\n')
+                INVALID_TARGETS=$(comm -13 <(echo "$VALID_TARGETS" | sort) <(echo "$REQUESTED_TARGETS" | sort))
+                if [ -n "$INVALID_TARGETS" ]; then
+                  echo "::warning::Invalid targets requested (missing patch_test.yaml or do not exist): $(echo $INVALID_TARGETS | tr '\n' ', ' | sed 's/, $//')"
+                fi
+              fi
+              echo "matrix=${OUTPUTS}" >> $GITHUB_OUTPUT
+          
+          - name: Target
+            id: target
+            run: |
+              # schedule can be slow
+              # if [ "${{ github.event_name }}" == "schedule" ]; then
+                # echo target=rehosting-arc >> $GITHUB_OUTPUT
+                # echo jobs=1 >> $GITHUB_OUTPUT
+              # else
+              # Run everything on github for now
+              echo target=ubuntu-latest >> $GITHUB_OUTPUT
+              echo jobs=100 >> $GITHUB_OUTPUT
+              # fi
+          
+    build_images:
+        runs-on: ${{ needs.next-version.outputs.target }}
+        needs: [next-version]
+        if: always()
+        strategy:
+          fail-fast: false # run all the jobs
+          max-parallel: ${{ fromJSON(needs.next-version.outputs.jobs) }}
+          matrix:
+            target: ${{ fromJSON(needs.next-version.outputs.matrix) }}
+        steps:
+          - name: Log in to Docker Hub
+            uses: docker/login-action@v3
+            with:
+              username: rehosting
+              password: ${{secrets.DOCKERHUB_TOKEN}}
+
+          - name: Checkout code
+            uses: actions/checkout@v4
+          
+          - name: Set up Docker Buildx
+            uses: docker/setup-buildx-action@v3
+          
+          - name: Find fname images
+            id: generate_fname
+            run: |
+                echo fname=$(find . -type f -name "Dockerfile.${{ matrix.target }}" | head -n 1 ) >> "$GITHUB_OUTPUT"
+                echo context=`dirname $(find . -type f -name "Dockerfile.${{ matrix.target }}" | head -n 1 )` >> "$GITHUB_OUTPUT"
+        
+          - name: Build Docker image for ${{ matrix.target }}
+            uses: docker/build-push-action@v6.3.0
+            with:
+              context: ${{ steps.generate_fname.outputs.context }}
+              push: true
+              cache-from: type=registry,ref=${{ github.repository }}:${{ matrix.target}}_test_cache,mode=max
+              cache-to: type=registry,ref=${{ github.repository }}:${{ matrix.target}}_test_cache,mode=max
+              file: ${{steps.generate_fname.outputs.fname}}
+              build-args: |
+                FW2TAR=rehosting/fw2tar:${{ github.event_name == 'schedule' && 'latest' || (github.event.inputs.fw2tar_git_ref != '' && format('git-{0}', github.event.inputs.fw2tar_git_ref) || github.event.inputs.fw2tar_version) }}
+                PENGUIN=rehosting/penguin:${{ github.event_name == 'schedule' && 'latest' || (github.event.inputs.penguin_git_ref != '' && format('git-{0}', github.event.inputs.penguin_git_ref) || github.event.inputs.penguin_version) }}
+
+              tags: ${{ github.repository }}:${{ matrix.target }}_test
+          
+          - name: Test image
+            id: results
+            run: |
+                set -x
+                dockerfile=$(find . -type f -name "Dockerfile.${{ matrix.target }}" | head -n 1 )
+
+                ptest=`dirname $dockerfile`/patch_test.yaml
+
+                if [ -f $ptest ]; then
+                    echo "Patch test file found"
+                    echo "has_test=true" >> "$GITHUB_OUTPUT"
+
+                    # install penguin script
+                    docker run rehosting/penguin penguin_install.local | sh
+                    
+                    # set up results directory
+                    mkdir -p $GITHUB_WORKSPACE/${{matrix.target}}/results
+                    
+                    # run the test
+                    timeout 30m penguin --extra_docker_args "-v $GITHUB_WORKSPACE/${{matrix.target}}/results:/workspace/results" repro ${{ github.repository }}:${{ matrix.target }}_test
+
+                    # get return code
+                    result=$?
+                    
+                    # get the results path
+                    artifact_path=$(realpath $GITHUB_WORKSPACE/${{matrix.target}}/results/)
+                    echo "artifact_path=${artifact_path}/*" >> "$GITHUB_OUTPUT" 
+                    
+                    # pass along the verifier.xml
+                    verifier=$(realpath $GITHUB_WORKSPACE/${{matrix.target}}/results/latest/verifier.xml)
+                    echo "Found verifier xml at $verifier"
+                    echo "output_verifier=${verifier}" >> "$GITHUB_OUTPUT"
+
+                    # Pass along result
+                    if [ $result -eq 124 ]; then
+                        echo "Timeout"
+                    elif [ $result -eq 0 ]; then
+                        echo "Success"
+                    else
+                        echo "Failed"
+                    fi
+                    exit $?
+                else
+                    echo "has_test=false" >> "$GITHUB_OUTPUT"
+                fi
+          - name: Test Report
+            uses: dorny/test-reporter@v2.0.0
+            if: (success() || failure()) && steps.results.outputs.has_test == 'true'
+            with: 
+              name: ${{ matrix.target }}-test-results
+              path: ${{ steps.results.outputs.output_verifier}} 
+              reporter: java-junit
+      
+          - name: Debug info
+            if: failure()
+            uses: actions/upload-artifact@v4
+            with:
+              name: ${{ matrix.target }}-artifacts
+              path: ${{ steps.results.outputs.artifact_path }}
