@@ -1,0 +1,96 @@
+plugins:
+  core:
+    timeout: 600
+  verifier:
+    continuous_eval: true
+    conditions:
+      telnetd_service_port_23_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'telnetd,'
+          - ',23,'
+      lighttpd_service_port_443_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',443,'
+      lighttpd_service_port_44300_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',44300,'
+      lighttpd_service_port_59886_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59886,'
+      lighttpd_service_port_59887_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59887,'
+      lighttpd_service_port_59889_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59889,'
+      lighttpd_service_port_59890_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59890,'
+      lighttpd_service_port_59892_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59892,'
+      lighttpd_service_port_59893_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59893,'
+      lighttpd_service_port_59894_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59894,'
+      lighttpd_service_port_59895_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',59895,'
+      lighttpd_service_port_80_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',80,'
+      ntpclient_service_port_123_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'ntpclient,'
+          - ',123,'
+      dhrelay_service_port_67_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'dhrelay,'
+          - ',67,'
+      dnsmasq_service_port_53_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'dnsmasq,'
+          - ',53,'

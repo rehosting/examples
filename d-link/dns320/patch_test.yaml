@@ -1,0 +1,48 @@
+plugins:
+  core:
+    timeout: 600
+  verifier:
+    continuous_eval: true
+    conditions:
+      mserver_service_port_24629_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'mserver,'
+          - ',24629,'
+      op_server_service_port_13579_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'op_server,'
+          - ',13579,'
+      lighttpd_service_port_443_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',443,'
+      lighttpd_service_port_5555_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',5555,'
+      lighttpd_service_port_80_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',80,'
+      and_service_port_24680_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'and,'
+          - ',24680,'
+      mfg_svr_service_port_5901_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'mfg_svr,'
+          - ',5901,'

@@ -1,0 +1,88 @@
+plugins:
+  core:
+    timeout: 600
+  verifier:
+    continuous_eval: true
+    conditions:
+      inetd_service_port_23_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'inetd,'
+          - ',23,'
+      inetd_service_port_7_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'inetd,'
+          - ',7,'
+      inetd_service_port_9_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'inetd,'
+          - ',9,'
+      snmpd_service_port_161_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'snmpd,'
+          - ',161,'
+      zebra_service_port_2601_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'zebra,'
+          - ',2601,'
+      ripd_service_port_2602_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'ripd,'
+          - ',2602,'
+      ripd_service_port_520_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'ripd,'
+          - ',520,'
+      ripngd_service_port_2603_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'ripngd,'
+          - ',2603,'
+      ripngd_service_port_521_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'ripngd,'
+          - ',521,'
+      lighttpd_service_port_443_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',443,'
+      lighttpd_service_port_80_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',80,'
+      menubar_cgi_output_correct:
+        type: file_contains
+        file: shared/menubar.cgi.out
+        string: "5.3.174"
+
+core:
+  shared_dir: ./shared
+
+static_files:
+  /igloo/init.d/99test_stride.sh:
+    type: inline_file
+    mode: 73
+    contents: |
+      #!/igloo/utils/sh
+      set -e
+      /var/www/cgi-bin/menubar.cgi | /igloo/utils/busybox grep -A1 "rev:" > /igloo/shared/menubar.cgi.out

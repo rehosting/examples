@@ -1,8 +1,9 @@
+ARG REGISTRY=docker.io
 ARG DOWNLOAD_URL=https://media.dlink.eu/support/products/dns/dns-320/driver_software/dns-320_fw_reva_2.06b01_all_en_20190410.zip
-ARG FW2TAR_VERSION=f44361d4c64e9e6f54d940cb2637bf9283961a29
-ARG PENGUIN_VERSION=v1.2.25
+ARG FW2TAR=${REGISTRY}/rehosting/fw2tar:f44361d4c64e9e6f54d940cb2637bf9283961a29
+ARG PENGUIN=${REGISTRY}/rehosting/penguin:v1.4.20
 
-FROM rehosting/fw2tar:${FW2TAR_VERSION} AS prep
+FROM ${FW2TAR} AS prep
 ARG DOWNLOAD_URL
 RUN apt-get update && apt-get install wget
 RUN wget -O /input_file ${DOWNLOAD_URL}
@@ -13,11 +14,13 @@ RUN fakeroot sh -c 'mkdir /fs;\
     cp -ar "/input_file_extract/DLINK_DNS320.2.06b01(2.13.0322.2019)_extract/4149280-35356704.squashfs_v4_le_extract/"* /fs/usr/local/modules/; \
     tar czf project.rootfs.tar.gz -C /fs .;'
 
-FROM rehosting/penguin:${PENGUIN_VERSION}
+FROM ${PENGUIN} AS run
 WORKDIR /workspace
 COPY --from=prep /project.rootfs.tar.gz /tmp
 RUN penguin init /tmp/project.rootfs.tar.gz --output_base / --output /workspace
-COPY ./d-link/dns320/patch.yaml /workspace/
-RUN echo "\npatches:\n- patch.yaml\n">> config.yaml
+COPY patch_dev.yaml /workspace/
 RUN chmod -R 777 /workspace
 CMD [ "penguin", "run", "."]
+
+FROM run AS test
+COPY patch_test.yaml /workspace/

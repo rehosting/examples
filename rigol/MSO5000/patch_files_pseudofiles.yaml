@@ -1,0 +1,18 @@
+pseudofiles:
+  /dev/ttyPS0: &id002
+    read:
+      model: zero
+    write:
+      model: discard
+    ioctl:
+      '*':
+        model: return_const
+        val: 0
+
+static_files:
+  /usr/sbin/nanddump:
+    type: symlink
+    target: /igloo/utils/exit0.sh
+  /igloo/utils/nandump.orig:
+    type: move
+    from: /usr/sbin/nanddump 

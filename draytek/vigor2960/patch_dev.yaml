@@ -1,0 +1,10 @@
+pseudofiles:
+  /dev/ptmx:
+    read:
+      model: zero
+    write:
+      model: discard
+    ioctl:
+      "*":
+        model: return_const
+        val: 0

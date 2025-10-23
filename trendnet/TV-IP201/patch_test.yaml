@@ -1,0 +1,37 @@
+plugins:
+  core:
+    timeout: 600
+  verifier:
+    continuous_eval: true
+    conditions:
+      upnp_service_port_1900_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'upnp,'
+          - ',1900,'
+      # upnp service changes around
+      # upnp_service_port_61003_started:
+      #   type: file_contains 
+      #   file: netbinds.csv
+      #   strings:
+      #     - 'upnp,'
+      #     - ',61003,'
+      udp_service_port_62976_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'udp,'
+          - ',62976,'
+      portmap_service_port_111_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'portmap,'
+          - ',111,'
+      webs_service_port_80_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'webs,'
+          - ',80,'

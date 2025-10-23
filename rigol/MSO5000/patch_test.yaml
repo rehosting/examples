@@ -1,0 +1,31 @@
+plugins:
+  core:
+    timeout: 600
+  verifier:
+    continuous_eval: true
+    conditions:
+      rpcbind_service_port_111_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'rpcbind,'
+          - ',111,'
+      # rpcbind seems to be an inconsistent port
+      # rpcbind_service_port_859_started:
+      #   type: file_contains 
+      #   file: netbinds.csv
+      #   strings:
+      #     - 'rpcbind,'
+      #     - ',859,'
+      lighttpd_service_port_80_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'lighttpd,'
+          - ',80,'
+      cupsd_service_port_631_started:
+        type: file_contains 
+        file: netbinds.csv
+        strings:
+          - 'cupsd,'
+          - ',631,'

@@ -1,0 +1,10 @@
+netdevs:
+- egiga0
+
+static_files:
+  /usr/local/modules/script/shutdown.sh:
+    type: symlink
+    target: /igloo/utils/exit0.sh
+  /bin/killall:
+    type: symlink
+    target: /igloo/utils/exit0.sh
