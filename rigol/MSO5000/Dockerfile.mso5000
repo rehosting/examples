@@ -1,7 +1,8 @@
 ARG REGISTRY=docker.io
-ARG DOWNLOAD_URL=https://beyondmeasure.rigoltech.com/acton/attachment/1579/f-c1edeca3-91de-44f3-932e-dbe38ddb3c9c/0/-/-/-/-/MSO5000%28ARM%29Update_v00.01.03.03.00.zip?sid=TV2:Q2jKaGpUj
-ARG FW2TAR=${REGISTRY}/rehosting/fw2tar:f44361d4c64e9e6f54d940cb2637bf9283961a29
-ARG PENGUIN=${REGISTRY}/rehosting/penguin:v1.2.24
+# Far as I can tell, MSO5000 and DS5000 run the same firmware. MSO5000 from manufacturer site got us to the DS5000 file
+ARG DOWNLOAD_URL=https://supportcn.rigol.com/Public/Uploads/uploadfile/files/ftp/Firmware/DS5000(ARM)Update%20v00.01.03.03.00.zip
+ARG FW2TAR=${REGISTRY}/rehosting/fw2tar:v2.0.6
+ARG PENGUIN=${REGISTRY}/rehosting/penguin:v2.2.41
 
 FROM ${FW2TAR} AS prep
 ARG DOWNLOAD_URL
@@ -9,9 +10,20 @@ RUN apt-get update && apt-get install -y curl
 RUN curl --output /input_file ${DOWNLOAD_URL}
 # RUN fakeroot fw2tar --primary_limit 2 /input_file
 RUN fakeroot sh -c 'unblob -k /input_file'
+# Noticed some minor name changes between firmware update files, should make this easier if we have to change link again
+RUN fakeroot sh -c '\
+    extract_dir=$(find /input_file_extract -name "DS5000*Update*.GEL_extract" -type d | head -1); \
+    if [ -n "$extract_dir" ]; then \
+        ln -s "$extract_dir" /update_base; \
+        echo "Created symlink: /update_base -> $extract_dir"; \
+    else \
+        echo "ERROR: Could not find DS5000 GEL extract directory"; \
+        find /input_file_extract -name "*GEL*" -type d; \
+        exit 1; \
+    fi'
 RUN fakeroot sh -c 'mkdir /fs;\
-    cp -avr "/input_file_extract/MSO5000(ARM)Update_v00.01.03.03.00/DS5000Update.GEL_extract/system.img.gz_extract/system.img_extract/3453940-14354645.gzip_extract/rootfs.img_extract/"* /fs; \
-    cp -avr "/input_file_extract/MSO5000(ARM)Update_v00.01.03.03.00/DS5000Update.GEL_extract/app.img.gz_extract/app.img_extract/img-1002851618_vol-app.ubifs_extract/"* /fs/rigol; \
+    cp -avr "/update_base/system.img.gz_extract/system.img_extract/3453940-14354645.gzip_extract/rootfs.img_extract/"* /fs; \
+    cp -avr "/update_base/app.img.gz_extract/app.img_extract/img-1002851618_vol-app.ubifs_extract/"* /fs/rigol; \
     tar czf project.rootfs.tar.gz -C /fs .;'
 
 FROM ${PENGUIN} AS run
