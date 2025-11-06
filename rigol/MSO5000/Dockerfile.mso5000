@@ -31,6 +31,7 @@ WORKDIR /workspace
 COPY --from=prep /project.rootfs.tar.gz /tmp
 RUN penguin init /tmp/project.rootfs.tar.gz --output_base / --output /workspace
 COPY patch_files_pseudofiles.yaml /workspace
+COPY patch_mounts.yaml /workspace
 RUN chmod -R 777 /workspace
 CMD [ "penguin", "run", "."]
 
